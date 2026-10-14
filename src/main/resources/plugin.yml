@@ -1,0 +1,21 @@
+name: CommandBlocker
+version: '${project.version}'
+main: cz.commandblocker.CommandBlocker
+api-version: '1.21'
+author: Failxos
+description: Blocks selected commands per world and hides them from tab completion.
+
+commands:
+  commandblocker:
+    description: Admin command for CommandBlocker
+    usage: /commandblocker reload
+    aliases: [cb]
+    permission: commandblocker.admin
+
+permissions:
+  commandblocker.admin:
+    description: Allows /commandblocker reload
+    default: op
+  commandblocker.bypass:
+    description: Ignores all command restrictions
+    default: op

@@ -1,0 +1,23 @@
+# CommandBlocker by Failxos
+#
+# Message shown to a player who tries a blocked command.
+# Supports & color codes. Leave empty ("") to show nothing.
+blocked-message: "&cThis command is disabled in this world."
+
+# Key = world name. Use "*" for rules that apply to every world.
+# Commands are written without the leading slash. Aliases are detected
+# automatically (e.g. blocking "tp" also blocks "teleport" and "minecraft:tp").
+worlds:
+  "*":
+    blocked-commands: []
+  world:
+    blocked-commands:
+      - sethome
+      - tpa
+  world_nether:
+    blocked-commands:
+      - spawn
+      - home
+  world_the_end:
+    blocked-commands:
+      - gamemode
