@@ -5,19 +5,39 @@
 blocked-message: "&cThis command is disabled in this world."
 
 # Key = world name. Use "*" for rules that apply to every world.
-# Commands are written without the leading slash. Aliases are detected
-# automatically (e.g. blocking "tp" also blocks "teleport" and "minecraft:tp").
+# Commands are written without the leading slash, ideally in quotes.
+# Aliases are detected automatically (e.g. blocking "tp" also blocks
+# "teleport" and "minecraft:tp").
+#
+# blocked-commands: commands players cannot use (and do not see in tab completion).
+# allowed-commands: exceptions. They always win over blocked-commands.
+#
+# Wildcards: "*" matches any characters.
+#   "tpa*"  -> tpa, tpaccept, tpahere, tpadeny, ...
+#   "*home" -> home, sethome, delhome, ...
+#   "*"     -> every command
+#
+# Whitelist mode: block "*" and list only the commands that should work
+# in allowed-commands (see the "lobby" example below).
 worlds:
   "*":
     blocked-commands: []
+    allowed-commands: []
   world:
     blocked-commands:
-      - sethome
-      - tpa
+      - "tpa*"
+      - "sethome"
   world_nether:
     blocked-commands:
-      - spawn
-      - home
+      - "spawn"
+      - "home"
   world_the_end:
     blocked-commands:
-      - gamemode
+      - "gamemode"
+  lobby:
+    blocked-commands:
+      - "*"
+    allowed-commands:
+      - "spawn"
+      - "msg"
+      - "help"

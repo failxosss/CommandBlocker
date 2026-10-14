@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -14,15 +15,18 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * CommandBlocker - blocks selected commands per world and hides them from tab completion.
+ * Supports "*" wildcards in command names (e.g. "tpa*") and per-world allow lists
+ * (e.g. block "*" and allow only a few commands).
  *
  * @author Failxos
  */
@@ -30,8 +34,10 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
 
     private static final String BYPASS_PERMISSION = "commandblocker.bypass";
 
-    // world name (lowercase) -> blocked command names (lowercase)
-    private final Map<String, Set<String>> blocked = new HashMap<>();
+    // world name (lowercase) -> blocked command patterns
+    private final Map<String, List<Pattern>> blocked = new HashMap<>();
+    // world name (lowercase) -> allowed command patterns (exceptions to blocked)
+    private final Map<String, List<Pattern>> allowed = new HashMap<>();
     private String blockedMessage = "";
 
     @Override
@@ -43,6 +49,7 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
 
     private void loadSettings() {
         blocked.clear();
+        allowed.clear();
         blockedMessage = ChatColor.translateAlternateColorCodes('&',
                 getConfig().getString("blocked-message", ""));
 
@@ -50,14 +57,31 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
         if (worlds == null) return;
 
         for (String worldName : worlds.getKeys(false)) {
-            Set<String> set = new HashSet<>();
-            for (String cmd : worlds.getStringList(worldName + ".blocked-commands")) {
-                String c = cmd.trim().toLowerCase(Locale.ROOT);
-                if (c.startsWith("/")) c = c.substring(1);
-                if (!c.isEmpty()) set.add(c);
-            }
-            blocked.put(worldName.toLowerCase(Locale.ROOT), set);
+            String key = worldName.toLowerCase(Locale.ROOT);
+            blocked.put(key, readPatterns(worlds.getStringList(worldName + ".blocked-commands")));
+            allowed.put(key, readPatterns(worlds.getStringList(worldName + ".allowed-commands")));
         }
+    }
+
+    private static List<Pattern> readPatterns(List<String> entries) {
+        List<Pattern> patterns = new ArrayList<>();
+        for (String entry : entries) {
+            String c = entry.trim().toLowerCase(Locale.ROOT);
+            if (c.startsWith("/")) c = c.substring(1);
+            if (!c.isEmpty()) patterns.add(toPattern(c));
+        }
+        return patterns;
+    }
+
+    /** Converts a command entry with optional "*" wildcards into a regex pattern. */
+    private static Pattern toPattern(String entry) {
+        String[] parts = entry.split("\\*", -1);
+        StringBuilder regex = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) regex.append(".*");
+            if (!parts[i].isEmpty()) regex.append(Pattern.quote(parts[i]));
+        }
+        return Pattern.compile(regex.toString());
     }
 
     /** Strips the "namespace:" prefix and lowercases. */
@@ -67,34 +91,56 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
         return idx >= 0 ? l.substring(idx + 1) : l;
     }
 
-    /** True if the given command label is blocked in the given world. */
-    private boolean isBlocked(String worldName, String label) {
-        Set<String> global = blocked.get("*");
-        Set<String> local = blocked.get(worldName.toLowerCase(Locale.ROOT));
-        if ((global == null || global.isEmpty()) && (local == null || local.isEmpty())) {
-            return false;
-        }
+    private static boolean isEmpty(List<Pattern> list) {
+        return list == null || list.isEmpty();
+    }
 
-        String base = baseName(label);
-        if (matches(global, base) || matches(local, base)) return true;
+    private static boolean matchesAny(List<Pattern> a, List<Pattern> b, List<String> names) {
+        return matches(a, names) || matches(b, names);
+    }
 
-        // Resolve real command so that aliases are covered too.
-        Command command = Bukkit.getCommandMap().getCommand(base);
-        if (command != null) {
-            String name = command.getName().toLowerCase(Locale.ROOT);
-            if (matches(global, name) || matches(local, name)) {
-                return true;
-            }
-            for (String alias : command.getAliases()) {
-                String a = alias.toLowerCase(Locale.ROOT);
-                if (matches(global, a) || matches(local, a)) return true;
+    private static boolean matches(List<Pattern> patterns, List<String> names) {
+        if (patterns == null) return false;
+        for (Pattern p : patterns) {
+            for (String name : names) {
+                if (p.matcher(name).matches()) return true;
             }
         }
         return false;
     }
 
-    private static boolean matches(Set<String> set, String name) {
-        return set != null && set.contains(name);
+    /** True if the given command label is blocked in the given world. */
+    private boolean isBlocked(String worldName, String label) {
+        String world = worldName.toLowerCase(Locale.ROOT);
+        List<Pattern> blockedGlobal = blocked.get("*");
+        List<Pattern> blockedLocal = blocked.get(world);
+        if (isEmpty(blockedGlobal) && isEmpty(blockedLocal)) {
+            return false;
+        }
+
+        String base = baseName(label);
+        Command command = Bukkit.getCommandMap().getCommand(base);
+
+        // Never lock out this plugin's own command (/cb reload).
+        if (command instanceof PluginCommand pluginCommand && pluginCommand.getPlugin() == this) {
+            return false;
+        }
+
+        // The typed name plus the real command name and all its aliases.
+        List<String> names = new ArrayList<>();
+        names.add(base);
+        if (command != null) {
+            names.add(command.getName().toLowerCase(Locale.ROOT));
+            for (String alias : command.getAliases()) {
+                names.add(alias.toLowerCase(Locale.ROOT));
+            }
+        }
+
+        if (!matchesAny(blockedGlobal, blockedLocal, names)) {
+            return false;
+        }
+        // Allowed commands are exceptions and always win over blocked ones.
+        return !matchesAny(allowed.get("*"), allowed.get(world), names);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

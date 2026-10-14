@@ -5,6 +5,8 @@ Blocked commands are also hidden from the tab-completion / command suggestions.
 
 - Paper 1.21+, Java 21
 - Per-world blocked commands, plus `"*"` for rules that apply to every world
+- Wildcards: `"tpa*"` blocks `tpa`, `tpaccept`, `tpahere`, ...
+- Whitelist mode: block `"*"` and allow only selected commands in a world
 - Aliases and namespaced variants are covered (blocking `tp` also blocks `teleport` and `minecraft:tp`)
 - Customizable message shown to the player
 - Players with `commandblocker.bypass` are not affected (default: OP)
@@ -18,23 +20,28 @@ Blocked commands are also hidden from the tab-completion / command suggestions.
 
 ## Configuration
 
-```yaml
 blocked-message: "&cThis command is disabled in this world."
 
 worlds:
   "*":                       # applies to every world
     blocked-commands: []
+    allowed-commands: []
   world:
     blocked-commands:
-      - sethome
-      - tpa
-  world_nether:
+      - "tpa*"               # tpa, tpaccept, tpahere, ...
+      - "sethome"
+  lobby:                     # whitelist mode: only these commands work
     blocked-commands:
-      - spawn
-      - home
-```
+      - "*"
+    allowed-commands:
+      - "spawn"
+      - "msg"
+      - "help"
 
-Commands are written without the leading slash. World names must match the folder name of the world.
+- Commands are written without the leading slash, ideally in quotes.
+- World names must match the folder name of the world.
+- `allowed-commands` are exceptions and always win over `blocked-commands`.
+- `*` matches any characters (`"tpa*"`, `"*home"`, `"*"`).
 
 ## Commands and permissions
 
@@ -45,9 +52,9 @@ Commands are written without the leading slash. World names must match the folde
 
 ## Building
 
-```
+
 mvn clean package
-```
+
 
 The jar is created at `target/CommandBlocker.jar`.
 
