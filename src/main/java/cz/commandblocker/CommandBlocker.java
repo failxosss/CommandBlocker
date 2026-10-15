@@ -1,5 +1,6 @@
 package cz.commandblocker;
 
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -21,10 +22,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * CommandBlocker - blocks selected commands per world and hides them from tab completion.
+ * CommandBlocker - blocks selected commands per world, hides them from tab completion
+ * and can split the chat into groups of worlds.
  * Supports "*" wildcards in command names (e.g. "tpa*") and per-world allow lists
  * (e.g. block "*" and allow only a few commands).
  *
@@ -33,12 +36,17 @@ import java.util.regex.Pattern;
 public final class CommandBlocker extends JavaPlugin implements Listener {
 
     private static final String BYPASS_PERMISSION = "commandblocker.bypass";
+    private static final String CHAT_SPY_PERMISSION = "commandblocker.chat.spy";
 
     // world name (lowercase) -> blocked command patterns
     private final Map<String, List<Pattern>> blocked = new HashMap<>();
     // world name (lowercase) -> allowed command patterns (exceptions to blocked)
     private final Map<String, List<Pattern>> allowed = new HashMap<>();
     private String blockedMessage = "";
+
+    // chat groups: world name (lowercase) -> group name. Read from the async chat thread.
+    private volatile Map<String, String> worldGroups = new ConcurrentHashMap<>();
+    private volatile boolean chatGroupsEnabled = false;
 
     @Override
     public void onEnable() {
@@ -54,13 +62,44 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
                 getConfig().getString("blocked-message", ""));
 
         ConfigurationSection worlds = getConfig().getConfigurationSection("worlds");
-        if (worlds == null) return;
-
-        for (String worldName : worlds.getKeys(false)) {
-            String key = worldName.toLowerCase(Locale.ROOT);
-            blocked.put(key, readPatterns(worlds.getStringList(worldName + ".blocked-commands")));
-            allowed.put(key, readPatterns(worlds.getStringList(worldName + ".allowed-commands")));
+        if (worlds != null) {
+            for (String worldName : worlds.getKeys(false)) {
+                String key = worldName.toLowerCase(Locale.ROOT);
+                blocked.put(key, readPatterns(worlds.getStringList(worldName + ".blocked-commands")));
+                allowed.put(key, readPatterns(worlds.getStringList(worldName + ".allowed-commands")));
+            }
         }
+
+        loadChatGroups();
+    }
+
+    private void loadChatGroups() {
+        Map<String, String> map = new ConcurrentHashMap<>();
+        chatGroupsEnabled = getConfig().getBoolean("chat-groups.enabled", false);
+
+        ConfigurationSection groups = getConfig().getConfigurationSection("chat-groups.groups");
+        if (groups != null) {
+            for (String groupName : groups.getKeys(false)) {
+                for (String world : groups.getStringList(groupName)) {
+                    String w = world.trim().toLowerCase(Locale.ROOT);
+                    if (w.isEmpty()) continue;
+                    if (map.containsKey(w)) {
+                        getLogger().warning("World '" + world + "' is in more than one chat group; using '"
+                                + map.get(w) + "'.");
+                        continue;
+                    }
+                    map.put(w, groupName.toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        worldGroups = map;
+    }
+
+    /** Group of a world. A world that is in no group forms a group of its own. */
+    private String groupOf(String worldName) {
+        String w = worldName.toLowerCase(Locale.ROOT);
+        String group = worldGroups.get(w);
+        return group != null ? "group:" + group : "world:" + w;
     }
 
     private static List<Pattern> readPatterns(List<String> entries) {
@@ -172,6 +211,22 @@ public final class CommandBlocker extends JavaPlugin implements Listener {
                 it.remove();
             }
         }
+    }
+
+    /** Chat groups: players only see chat from worlds in the same group. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onChat(AsyncChatEvent event) {
+        if (!chatGroupsEnabled) return;
+
+        Player sender = event.getPlayer();
+        String senderGroup = groupOf(sender.getWorld().getName());
+
+        // Only players are filtered; the console and other audiences keep seeing everything.
+        event.viewers().removeIf(audience ->
+                audience instanceof Player viewer
+                        && !viewer.getUniqueId().equals(sender.getUniqueId())
+                        && !viewer.hasPermission(CHAT_SPY_PERMISSION)
+                        && !groupOf(viewer.getWorld().getName()).equals(senderGroup));
     }
 
     @EventHandler

@@ -4,6 +4,27 @@
 # Supports & color codes. Leave empty ("") to show nothing.
 blocked-message: "&cThis command is disabled in this world."
 
+# Chat groups
+# Worlds in the same group share chat: players only see chat messages from
+# players in worlds of their own group.
+# A world that is not listed in any group has its own separate chat.
+# Private messages (/msg) and the console are not affected.
+# Players with the permission commandblocker.chat.spy see chat from all worlds.
+chat-groups:
+  enabled: false
+  groups:
+    main:
+      - world
+      - spawn
+      - world_nether
+      - world_the_end
+    lobby:
+      - lobby
+    chunk:
+      - chunkbase
+      - chunkbasebase
+      - chunkreset
+
 # Key = world name. Use "*" for rules that apply to every world.
 # Commands are written without the leading slash, ideally in quotes.
 # Aliases are detected automatically (e.g. blocking "tp" also blocks
@@ -22,22 +43,48 @@ blocked-message: "&cThis command is disabled in this world."
 worlds:
   "*":
     blocked-commands: []
-    allowed-commands: []
+    allowed-commands: [lobby]
   world:
     blocked-commands:
-      - "tpa*"
-      - "sethome"
+      - "chunk*"
+      - ""
+  spawn:
+    blocked-commands:
+      - "chunk*"
+      - ""
   world_nether:
     blocked-commands:
-      - "spawn"
-      - "home"
+      - "chunk*"
+      - ""
   world_the_end:
     blocked-commands:
-      - "gamemode"
+      - "chunk*"
   lobby:
     blocked-commands:
       - "*"
     allowed-commands:
-      - "spawn"
-      - "msg"
-      - "help"
+      - "login"
+
+
+   # CHUNK BASE GAMEMODE
+
+  chunkbase:
+    blocked-commands:
+      - "*"
+    allowed-commands:
+      - "chunk*"
+      - "lobby"
+
+  chunkbasebase:
+    blocked-commands:
+      - "*"
+    allowed-commands:
+      - "chunk*"
+      - "lobby"
+
+  chunkreset:
+    blocked-commands:
+      - "*"
+    allowed-commands:
+      - "chunk*"
+      - "lobby"

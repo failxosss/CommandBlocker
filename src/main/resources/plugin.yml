@@ -3,7 +3,7 @@ version: '${project.version}'
 main: cz.commandblocker.CommandBlocker
 api-version: '1.21'
 author: Failxos
-description: Blocks selected commands per world and hides them from tab completion.
+description: Blocks selected commands per world, hides them from tab completion and splits chat by world groups.
 
 commands:
   commandblocker:
@@ -19,3 +19,6 @@ permissions:
   commandblocker.bypass:
     description: Ignores all command restrictions
     default: op
+  commandblocker.chat.spy:
+    description: Sees chat messages from all worlds, ignoring chat groups
+    default: false
